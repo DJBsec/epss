@@ -2,7 +2,7 @@ name: Fetch NVD CVE Data
 
 on:
   schedule:
-    - cron: "0 2 * * *"  # Daily at 2:00 AM UTC
+    - cron: "0 2 * * *"  # Every day at 2:00 AM UTC
   workflow_dispatch:
 
 jobs:
@@ -10,19 +10,22 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Repo
+      - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Download NVD CVE Feed
+      - name: Download recent NVD CVE feed
         run: |
           mkdir -p data
           curl -sSL "https://nvd.nist.gov/feeds/json/cve/1.1/nvdcve-1.1-recent.json.gz" -o data/nvdcve.json.gz
-          gunzip -f data/nvdcve.json.gz
+          gunzip -f data/nvdcve.json.gz || true
 
-      - name: Commit and Push
+      - name: Push to repo using PAT
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
         run: |
           git config user.name "github-actions"
           git config user.email "github-actions@users.noreply.github.com"
-          git add data/nvdcve.json
-          git commit -m "Update NVD CVE cache"
-          git push
+          git remote set-url origin https://x-access-token:${GH_PAT}@github.com/${{ github.repository }}
+          git add data/nvdcve.json || echo "Nothing to add"
+          git commit -m "Update NVD CVE cache" || echo "No changes to commit"
+          git push || echo "Nothing to push"
