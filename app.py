@@ -1,6 +1,7 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import requests
+import os
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
@@ -19,7 +20,14 @@ def fetch_epss_data(cve, date):
         data = response.json()
 
         if not data["data"]:
-            return {"error": f"The CVE {cve} is not in the EPSS repository."}
+            return {
+                "cve": cve,
+                "date": date,
+                "epss": "N/A",
+                "percentile": "N/A",
+                "description": "This CVE is not currently listed in the EPSS database.",
+                "message": "No score available at this time."
+            }
 
         epss = round(float(data["data"][0]["epss"]) * 100, 2)
         percentile = round(float(data["data"][0]["percentile"]) * 100, 2)
@@ -41,8 +49,14 @@ def fetch_cve_description(cve):
     Fetch the CVE description from the NVD API.
     """
     nvd_url = f"https://services.nvd.nist.gov/rest/json/cve/2.0?cveId={cve}"
+    headers = {}
+
+    api_key = os.getenv("NVD_API_KEY")
+    if api_key:
+        headers["apiKey"] = api_key
+
     try:
-        res = requests.get(nvd_url, timeout=10)
+        res = requests.get(nvd_url, headers=headers, timeout=10)
         res.raise_for_status()
         data = res.json()
         return data["vulnerabilities"][0]["cve"]["descriptions"][0]["value"]
@@ -78,7 +92,7 @@ def get_epss():
 
         result = fetch_epss_data(cve, date)
 
-        if "error" not in result:
+        if "error" not in result and result.get("epss") != "N/A":
             result["description"] = fetch_cve_description(cve)
 
         response = jsonify(result)
