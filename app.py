@@ -46,10 +46,12 @@ def fetch_epss_data(cve, date):
 
 def fetch_cve_description(cve):
     """
-    Fetch the CVE description from the NVD API.
+    Fetch the CVE description from the NVD 1.0 API.
     """
-    nvd_url = f"https://services.nvd.nist.gov/rest/json/cve/2.0?cveId={cve}"
-    headers = {}
+    nvd_url = f"https://services.nvd.nist.gov/rest/json/cve/1.0/{cve}"
+    headers = {
+        "User-Agent": "EPSS-Lookup/1.0"
+    }
 
     api_key = os.getenv("NVD_API_KEY")
     if api_key:
@@ -59,9 +61,16 @@ def fetch_cve_description(cve):
         res = requests.get(nvd_url, headers=headers, timeout=10)
         res.raise_for_status()
         data = res.json()
-        return data["vulnerabilities"][0]["cve"]["descriptions"][0]["value"]
+
+        descriptions = data["result"]["CVE_Items"][0]["cve"]["description"]["description_data"]
+        for entry in descriptions:
+            if entry["lang"] == "en":
+                return entry["value"]
+
+        return "No English description available."
+
     except Exception as e:
-        print(f"Error fetching description: {e}")
+        print(f"Error fetching CVE description: {e}")
         return "Description not available"
 
 
