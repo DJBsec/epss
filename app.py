@@ -2,11 +2,21 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 import requests
 import os
+import json
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
 
 BASE_URL = "https://api.first.org/data/v1/epss"
+
+# Load NVD cache once at startup
+NVD_DATA = {}
+try:
+    with open("data/nvdcve.json", "r", encoding="utf-8") as f:
+        NVD_DATA = json.load(f)
+        print(f"✅ Loaded {len(NVD_DATA['CVE_Items'])} CVEs from NVD cache")
+except Exception as e:
+    print(f"⚠️ Failed to load local NVD cache: {e}")
 
 def fetch_epss_data(cve, date):
     """
@@ -43,41 +53,24 @@ def fetch_epss_data(cve, date):
     except requests.exceptions.RequestException as e:
         return {"error": str(e)}
 
-
-def fetch_cve_description(cve):
+def get_cached_cve_description(cve_id):
     """
-    Fetch the CVE description from the NVD 1.0 API.
+    Lookup CVE description from locally cached NVD JSON.
     """
-    nvd_url = f"https://services.nvd.nist.gov/rest/json/cve/1.0/{cve}"
-    headers = {
-        "User-Agent": "EPSS-Lookup/1.0"
-    }
-
-    api_key = os.getenv("NVD_API_KEY")
-    if api_key:
-        headers["apiKey"] = api_key
-
     try:
-        res = requests.get(nvd_url, headers=headers, timeout=10)
-        res.raise_for_status()
-        data = res.json()
-
-        descriptions = data["result"]["CVE_Items"][0]["cve"]["description"]["description_data"]
-        for entry in descriptions:
-            if entry["lang"] == "en":
-                return entry["value"]
-
-        return "No English description available."
-
+        for item in NVD_DATA.get("CVE_Items", []):
+            if item["cve"]["CVE_data_meta"]["ID"] == cve_id:
+                for desc in item["cve"]["description"]["description_data"]:
+                    if desc["lang"] == "en":
+                        return desc["value"]
+        return "Description not found in local NVD data."
     except Exception as e:
-        print(f"Error fetching CVE description: {e}")
+        print(f"Error reading NVD cache: {e}")
         return "Description not available"
-
 
 @app.route('/')
 def home():
     return "EPSS Lookup API is running!"
-
 
 @app.route('/get_epss', methods=['POST', 'OPTIONS'])
 def get_epss():
@@ -101,8 +94,8 @@ def get_epss():
 
         result = fetch_epss_data(cve, date)
 
-        if "error" not in result and result.get("epss") != "N/A":
-            result["description"] = fetch_cve_description(cve)
+        if "error" not in result:
+            result["description"] = get_cached_cve_description(cve)
 
         response = jsonify(result)
         response.headers.add("Access-Control-Allow-Origin", "*")
@@ -110,7 +103,6 @@ def get_epss():
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=10000)
