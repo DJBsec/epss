@@ -3,8 +3,6 @@ from flask_cors import CORS
 import requests
 
 app = Flask(__name__)
-
-# Allow CORS for all origins (Adjust this if needed)
 CORS(app, resources={r"/*": {"origins": "*"}})
 
 BASE_URL = "https://api.first.org/data/v1/epss"
@@ -16,7 +14,7 @@ def fetch_epss_data(cve, date):
     url = f"{BASE_URL}?cve={cve}&date={date}"
 
     try:
-        response = requests.get(url)
+        response = requests.get(url, timeout=10)
         response.raise_for_status()
         data = response.json()
 
@@ -37,9 +35,26 @@ def fetch_epss_data(cve, date):
     except requests.exceptions.RequestException as e:
         return {"error": str(e)}
 
+
+def fetch_cve_description(cve):
+    """
+    Fetch the CVE description from the NVD API.
+    """
+    nvd_url = f"https://services.nvd.nist.gov/rest/json/cve/2.0?cveId={cve}"
+    try:
+        res = requests.get(nvd_url, timeout=10)
+        res.raise_for_status()
+        data = res.json()
+        return data["vulnerabilities"][0]["cve"]["descriptions"][0]["value"]
+    except Exception as e:
+        print(f"Error fetching description: {e}")
+        return "Description not available"
+
+
 @app.route('/')
 def home():
     return "EPSS Lookup API is running!"
+
 
 @app.route('/get_epss', methods=['POST', 'OPTIONS'])
 def get_epss():
@@ -62,12 +77,17 @@ def get_epss():
             return jsonify({"error": "Both CVE number and date are required"}), 400
 
         result = fetch_epss_data(cve, date)
+
+        if "error" not in result:
+            result["description"] = fetch_cve_description(cve)
+
         response = jsonify(result)
         response.headers.add("Access-Control-Allow-Origin", "*")
         return response
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=10000)
