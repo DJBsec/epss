@@ -27,7 +27,7 @@ jobs:
         run: |
           git config user.name "github-actions"
           git config user.email "github-actions@users.noreply.github.com"
-          git remote set-url origin https://x-access-token:${GH_PAT}@github.com/${{ github.repository }}
+          git remote set-url origin "https://x-access-token:$GH_PAT@github.com/${{ github.repository }}"
           git add data/nvdcve.json || echo "Nothing to add"
           git commit -m "Update NVD CVE cache" || echo "No changes to commit"
           git push || echo "Nothing to push"
