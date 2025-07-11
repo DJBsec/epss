@@ -68,6 +68,33 @@ def get_cached_cve_description(cve_id):
         print(f"Error reading NVD cache: {e}")
         return "Description not available"
 
+def fetch_shodan_cve_data(cve):
+    """
+    Fetch additional CVE details from Shodan CVE DB.
+    """
+    url = f"https://cvedb.shodan.io/cve/{cve}"
+    try:
+        response = requests.get(url, timeout=10)
+        response.raise_for_status()
+        data = response.json()
+
+        epss_pct = round(data.get("epss", 0) * 100, 2)
+        ranking_epss_pct = round(data.get("ranking_epss", 0) * 100, 2)
+
+        return {
+            "summary": data.get("summary"),
+            "cvss_v2": data.get("cvss_v2"),
+            "cvss_v3": data.get("cvss_v3"),
+            "shodan_epss": epss_pct,
+            "ranking_epss": ranking_epss_pct,
+            "references": data.get("references", []),
+            "published_time": data.get("published_time")
+        }
+
+    except Exception as e:
+        print(f"Error fetching Shodan CVE data: {e}")
+        return {}
+
 @app.route('/')
 def home():
     return "EPSS Lookup API is running!"
@@ -96,6 +123,8 @@ def get_epss():
 
         if "error" not in result:
             result["description"] = get_cached_cve_description(cve)
+            shodan_data = fetch_shodan_cve_data(cve)
+            result.update(shodan_data)
 
         response = jsonify(result)
         response.headers.add("Access-Control-Allow-Origin", "*")
